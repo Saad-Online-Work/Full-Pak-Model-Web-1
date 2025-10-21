@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMI Institute Admin Panel</title>
+    <!-- Load Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Chart.js CDN for Reports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Load Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Styles and Global Theme Variables */
+        :root {
+            --bg-color: #121212;
+            --card-color: #1E1E1E;
+            --accent-color: #00BFFF;
+            --text-color: #E0E0E0;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            --transition: all 0.3s ease-in-out;
+        }
+
+        /* Applying Variables to Tailwind Configuration */
+        html {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+        }
+
+        .card {
+            background-color: var(--card-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            box-shadow: 0 0 20px 5px rgba(0, 191, 255, 0.3); /* Hover glow effect */
+        }
+
+        .accent-button {
+            background-color: var(--accent-color);
+            color: #FFFFFF; /* Explicitly white text for high contrast on blue accent */
+            font-weight: 600;
+            border-radius: 8px;
+            transition: var(--transition);
+            border: 1px solid transparent;
+        }
+
+        .accent-button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* --- LIGHT MODE BUTTON STYLING --- */
+        /* Applied when the body has the 'light-mode' class */
+        .light-mode .accent-button {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border: 1px solid #0099CC; /* Slightly darker accent border for definition */
+        }
+
+        .light-mode .accent-button:hover {
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+        /* ---------------------------------- */
+
+        /* Fixed Header */
+        #header {
+            z-index: 50;
+            top: 0;
+            position: fixed;
+        }
+        
+        /* Mobile Overlay Menu */
+        #sidebar-overlay {
+            z-index: 60;
+            transition: transform var(--transition);
+        }
+        
+        #sidebar-overlay.hidden-mobile {
+            transform: translateX(-100%);
+        }
+
+        /* Custom scrollbar for dark theme (optional but nice) */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--card-color);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent-color);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #008cc3;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- 1. PMI Head / Master Admin Header (Fixed Top) -->
+    <header id="header" class="w-full card shadow-xl p-4 md:px-8 flex justify-between items-center text-white border-b border-gray-800">
+        <!-- Logo and Title -->
+        <div class="flex items-center space-x-3">
+            <!-- Mobile Menu Toggle (Hamburger) -->
+            <button id="menu-toggle" class="md:hidden p-2 rounded-lg card text-xl" onclick="App.toggleSidebar()">
+                <i data-lucide="menu" class="w-6 h-6"></i>
+            </button>
+            <div class="text-xl md:text-2xl font-bold flex items-center" style="color: var(--accent-color);">
+                <i data-lucide="book-open-text" class="w-6 h-6 md:w-8 md:h-8 mr-2"></i>
+                <span class="hidden sm:inline">Pak Model Institute</span>
+                <span class="inline sm:hidden">PMI</span>
+            </div>
+        </div>
+
+        <!-- Current Date/Time -->
+        <div class="text-xs sm:text-base text-gray-400 font-mono hidden sm:block" id="current-datetime"></div>
+
+        <!-- Master Controls / Settings -->
+        <div class="flex items-center space-x-4">
+            <div class="text-xs sm:text-base text-gray-300 hidden md:block">Master Admin</div>
+            <button class="p-2 rounded-lg card hover:opacity-80" onclick="App.navigate('settings')">
+                <i data-lucide="settings" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex pt-16 min-h-screen">
+        
+        <!-- 2. Side Menu (Desktop Fixed Left / Mobile Overlay) -->
+        <aside id="sidebar-overlay" class="fixed inset-0 w-64 bg-gray-900 md:bg-transparent md:static md:w-56 hidden-mobile md:block flex-shrink-0 pt-8" onclick="App.closeSidebarOnBlur(event)">
+            <!-- Sidebar Content -->
+            <nav id="sidebar" class="w-full h-full md:w-56 card md:shadow-none p-4 space-y-2 flex flex-col pt-8 md:pt-4">
+                <!-- Menu Items -->
+            </nav>
+        </aside>
+
+        <!-- 3. Main Content Area -->
+        <main class="flex-grow p-4 md:p-8 overflow-y-auto">
+            <div id="main-content" class="mx-auto max-w-7xl">
+                <!-- Content will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- General Message/Modal Container -->
+    <div id="modal-container" class="fixed inset-0 bg-black bg-opacity-70 hidden justify-center items-center z-50">
+        <!-- Modal Content -->
+    </div>
+
+
+    <script>
+        // --- Global Data Models (LocalStorage Keys) ---
+        const LS_KEYS = {
+            CLASSES: 'pmi_classes',
+            STUDENTS: 'pmi_students',
+            TEACHERS: 'pmi_teachers',
+            ATTENDANCE: 'pmi_attendance',
+            FEES: 'pmi_fees',
+            THEME: 'pmi_theme',
+        };
+
+        // --- Utility Functions ---
+
+        /** Generates a simple UUID */
+        const generateId = () => crypto.randomUUID();
+
+        /** Format date for display */
+        const formatDate = (dateString) => new Date(dateString).toLocaleDateString();
+
+        /** Format amount for display */
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-PK', {
+                style: 'currency',
+                currency: 'PKR', // Assuming Pakistani Rupee
+                minimumFractionDigits: 0
+            }).format(amount);
+        };
+
+        /** Updates the current date and time in the header */
+        function updateDateTime() {
+            const dtElement = document.getElementById('current-datetime');
+            if (dtElement) {
+                const now = new Date();
+                const date = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                dtElement.textContent = `${date} | ${time}`;
+            }
+        }
+        
+        // --- Core Application Logic ---
+
+        const App = {
+            data: {
+                classes: [],
+                students: [], // Now stores photoBase64 instead of photoURL
+                teachers: [],
+                attendance: [], // {id, studentId, classId, date, status: 'P'/'A'}
+                fees: [], // {id, studentId, monthYear, amount, dateCollected}
+            },
+            state: {
+                currentScreen: 'dashboard',
+                isSidebarOpen: false,
+                isDarkTheme: true,
+                attendanceFilters: { classId: '', date: new Date().toISOString().substring(0, 10) },
+                feesFilters: { classId: '', month: '' },
+            },
+            
+            // --- Persistence (LocalStorage) ---
+
+            loadData() {
+                try {
+                    Object.keys(this.data).forEach(key => {
+                        const lsKey = LS_KEYS[key.toUpperCase()];
+                        const storedData = localStorage.getItem(lsKey);
+                        if (storedData) {
+                            this.data[key] = JSON.parse(storedData);
+                        }
+                    });
+
+                    const storedTheme = localStorage.getItem(LS_KEYS.THEME);
+                    this.state.isDarkTheme = storedTheme === 'light' ? false : true;
+
+                } catch (error) {
+                    console.error("Error loading data from localStorage:", error);
+                    this.showModal('Error', 'Could not load data. Local storage might be full or corrupted.');
+                }
+            },
+
+            saveData(key) {
+                try {
+                    const lsKey = LS_KEYS[key.toUpperCase()];
+                    if (lsKey) {
+                        localStorage.setItem(lsKey, JSON.stringify(this.data[key]));
+                    } else {
+                        console.error(`Invalid data key provided: ${key}`);
+                    }
+                } catch (error) {
+                    console.error(`Error saving ${key} to localStorage:`, error);
+                    this.showModal('Error', `Could not save ${key} data. Please check console.`);
+                }
+            },
+
+            // --- UI/Navigation ---
+
+            navigate(screen) {
+                this.state.currentScreen = screen;
+                this.closeSidebar();
+                this.render();
+            },
+            
+            toggleSidebar() {
+                this.state.isSidebarOpen = !this.state.isSidebarOpen;
+                const overlay = document.getElementById('sidebar-overlay');
+                overlay.classList.toggle('hidden-mobile', !this.state.isSidebarOpen);
+                overlay.classList.toggle('bg-opacity-0', !this.state.isSidebarOpen);
+            },
+
+            closeSidebar() {
+                this.state.isSidebarOpen = false;
+                document.getElementById('sidebar-overlay').classList.add('hidden-mobile');
+            },
+
+            closeSidebarOnBlur(event) {
+                if (event.target.id === 'sidebar-overlay' && this.state.isSidebarOpen) {
+                    this.toggleSidebar();
+                }
+            },
+
+            // --- Theme/Style ---
+
+            setTheme(isDark) {
+                this.state.isDarkTheme = isDark;
+                const theme = isDark ? 'dark' : 'light';
+                localStorage.setItem(LS_KEYS.THEME, theme);
+
+                const root = document.documentElement.style;
+                const body = document.body;
+
+                if (isDark) {
+                    root.setProperty('--bg-color', '#121212');
+                    root.setProperty('--card-color', '#1E1E1E');
+                    root.setProperty('--text-color', '#E0E0E0');
+                    root.setProperty('--shadow', '0 4px 12px rgba(0, 0, 0, 0.4)');
+                    // Remove light-mode class for dark theme buttons
+                    body.classList.remove('light-mode');
+                    document.getElementById('header').classList.remove('border-gray-300');
+                    document.getElementById('header').classList.add('border-gray-800');
+                } else {
+                    root.setProperty('--bg-color', '#F0F2F5');
+                    root.setProperty('--card-color', '#FFFFFF');
+                    root.setProperty('--text-color', '#333333');
+                    root.setProperty('--shadow', '0 4px 12px rgba(0, 0, 0, 0.1)');
+                    root.setProperty('--accent-color', '#00BFFF'); // Keep accent color consistent
+                    // Add light-mode class for light theme button styling
+                    body.classList.add('light-mode');
+                    document.getElementById('header').classList.remove('border-gray-800');
+                    document.getElementById('header').classList.add('border-gray-300');
+                }
+                this.renderSidebar(); // Rerender sidebar to update icon
+            },
+
+            toggleTheme() {
+                this.setTheme(!this.state.isDarkTheme);
+            },
+
+            // --- UI Rendering ---
+
+            render() {
+                const contentArea = document.getElementById('main-content');
+                
+                // Set the correct theme on the body
+                this.setTheme(this.state.isDarkTheme);
+
+                // Render dynamic components
+                this.renderSidebar();
+                
+                // Clear and render main content based on state
+                contentArea.innerHTML = '';
+                let title = '';
+                let html = '';
+
+                switch (this.state.currentScreen) {
+                    case 'dashboard':
+                        title = 'Dashboard';
+                        html = this.renderDashboard();
+                        break;
+                    case 'admissions':
+                        title = 'Admissions / Student Management';
+                        html = this.renderAdmissions();
+                        break;
+                    case 'teachers':
+                        title = 'Teachers Management';
+                        html = this.renderTeachers();
+                        break;
+                    case 'attendance':
+                        title = 'Attendance Tracker';
+                        html = this.renderAttendance();
+                        break;
+                    case 'fees':
+                        title = 'Fees Collection';
+                        html = this.renderFees();
+                        break;
+                    case 'reports':
+                        title = 'Reports & Analytics';
+                        html = this.renderReports();
+                        break;
+                    case 'manage_classes':
+                        title = 'Manage Classes';
+                        html = this.renderClasses();
+                        break;
+                    case 'settings':
+                        title = 'Settings & Utilities';
+                        html = this.renderSettings();
+                        break;
+                    default:
+                        title = 'Welcome';
+                        html = this.renderDashboard();
+                }
+
+                contentArea.innerHTML = `
+                    <h1 class="text-3xl md:text-4xl font-extrabold mb-8 pt-4" style="color: var(--accent-color);">${title}</h1>
+                    ${html}
+                `;
+                
+                // Re-initialize icons (lucide) and execute post-render scripts (e.g., Chart.js)
+                lucide.createIcons();
+                this.runPostRenderScripts(this.state.currentScreen);
+            },
+
+            renderSidebar() {
+                const navItems = [
+                    { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+                    { id: 'admissions', icon: 'user-plus', label: 'Admissions' },
+                    { id: 'teachers', icon: 'users', label: 'Teachers' },
+                    { id: 'attendance', icon: 'calendar-check', label: 'Attendance' },
+                    { id: 'fees', icon: 'wallet', label: 'Fees' },
+                    { id: 'reports', icon: 'bar-chart-2', label: 'Reports' },
+                    { id: 'manage_classes', icon: 'graduation-cap', label: 'Manage Classes' },
+                ];
+                
+                const sidebar = document.getElementById('sidebar');
+                
+                let navHtml = navItems.map(item => `
+                    <button class="w-full text-left flex items-center p-3 rounded-lg hover:bg-gray-700 transition-colors ${this.state.currentScreen === item.id ? 'bg-gray-700 font-bold' : ''}" onclick="App.navigate('${item.id}')">
+                        <i data-lucide="${item.icon}" class="w-5 h-5 mr-3" style="color: var(--accent-color);"></i>
+                        ${item.label}
+                    </button>
+                `).join('');
+
+                navHtml += `
+                    <div class="mt-auto pt-4 border-t border-gray-700">
+                        <button class="w-full text-left flex items-center p-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="App.toggleTheme()">
+                            <i data-lucide="${this.state.isDarkTheme ? 'sun' : 'moon'}" class="w-5 h-5 mr-3" style="color: var(--accent-color);"></i>
+                            Theme: ${this.state.isDarkTheme ? 'Dark' : 'Light'}
+                        </button>
+                        <button class="w-full text-left flex items-center p-3 rounded-lg hover:bg-gray-700 transition-colors ${this.state.currentScreen === 'settings' ? 'bg-gray-700 font-bold' : ''}" onclick="App.navigate('settings')">
+                            <i data-lucide="settings" class="w-5 h-5 mr-3" style="color: var(--accent-color);"></i>
+                            Settings
+                        </button>
+                    </div>
+                `;
+                
+                sidebar.innerHTML = navHtml;
+                lucide.createIcons();
+            },
+
+            // --- Modal/Confirmation ---
+
+            showModal(title, message, isConfirm = false, onConfirm = () => {}) {
+                const modalContainer = document.getElementById('modal-container');
+                let buttonsHtml = '';
+                
+                if (isConfirm) {
+                    buttonsHtml = `
+                        <button id="modal-confirm" class="accent-button px-6 py-2">Confirm</button>
+                        <button id="modal-cancel" class="bg-gray-600 text-white px-6 py-2 rounded-lg ml-3">Cancel</button>
+                    `;
+                } else {
+                    buttonsHtml = `<button id="modal-ok" class="accent-button px-6 py-2">OK</button>`;
+                }
+
+                modalContainer.innerHTML = `
+                    <div class="card p-6 w-11/12 max-w-md" role="alertdialog" aria-modal="true">
+                        <h3 class="text-xl font-bold mb-4 border-b pb-2" style="color: var(--accent-color);">${title}</h3>
+                        <p class="mb-6">${message}</p>
+                        <div class="flex justify-end">
+                            ${buttonsHtml}
+                        </div>
+                    </div>
+                `;
+                modalContainer.classList.remove('hidden');
+                modalContainer.classList.add('flex');
+
+                const closeModal = () => {
+                    modalContainer.classList.add('hidden');
+                    modalContainer.classList.remove('flex');
+                };
+
+                if (isConfirm) {
+                    document.getElementById('modal-confirm').onclick = () => { onConfirm(); closeModal(); };
+                    document.getElementById('modal-cancel').onclick = closeModal;
+                } else {
+                    document.getElementById('modal-ok').onclick = closeModal;
+                }
+            },
+
+            // --- Screen Render Functions ---
+
+            renderDashboard() {
+                // Statistics
+                const totalStudents = this.data.students.length;
+                const totalTeachers = this.data.teachers.length;
+                
+                const now = new Date();
+                const currentMonthYear = now.getFullYear() + '-' + (now.getMonth() + 1).toString().padStart(2, '0');
+                
+                // Calculate Pending Fees (Simple: Count students with no fee entry for the current month)
+                const studentsPaidThisMonth = new Set(
+                    this.data.fees
+                        .filter(f => f.monthYear.startsWith(currentMonthYear)) // Handle monthYear normalization slightly differently here
+                        .map(f => f.studentId)
+                );
+                const pendingFeeStudents = this.data.students.filter(s => !studentsPaidThisMonth.has(s.id));
+                const pendingFeeCount = pendingFeeStudents.length;
+
+                const stats = [
+                    { title: 'Total Students', value: totalStudents, icon: 'graduation-cap', color: 'text-green-400' },
+                    { title: 'Total Teachers', value: totalTeachers, icon: 'users', color: 'text-yellow-400' },
+                    { title: 'Pending Fees (This Month)', value: pendingFeeCount, icon: 'wallet-x', color: 'text-red-400' },
+                ];
+
+                const quickActions = [
+                    { title: 'Attendance', icon: 'calendar-check', screen: 'attendance', color: 'bg-indigo-600' },
+                    { title: 'Admissions', icon: 'user-plus', screen: 'admissions', color: 'bg-blue-600' },
+                    { title: 'Fees', icon: 'wallet', screen: 'fees', color: 'bg-green-600' },
+                    { title: 'Teachers', icon: 'users', screen: 'teachers', color: 'bg-yellow-600' },
+                    { title: 'Reports', icon: 'bar-chart-2', screen: 'reports', color: 'bg-red-600' },
+                    { title: 'Classes', icon: 'graduation-cap', screen: 'manage_classes', color: 'bg-purple-600' },
+                ];
+
+
+                return `
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+                        ${stats.map(stat => `
+                            <div class="card p-6 flex justify-between items-center h-[150px]">
+                                <div>
+                                    <p class="text-sm uppercase text-gray-400 font-semibold">${stat.title}</p>
+                                    <p class="text-4xl font-extrabold mt-1 ${stat.color}">${stat.value}</p>
+                                </div>
+                                <i data-lucide="${stat.icon}" class="w-12 h-12 opacity-30 ${stat.color}"></i>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <h2 class="text-2xl font-bold mb-4 border-b border-gray-700 pb-2" style="color: var(--accent-color);">Quick Actions</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                        ${quickActions.map(action => `
+                            <button class="card p-4 text-center h-[120px] flex flex-col justify-center items-center hover:scale-[1.03] transition-transform" onclick="App.navigate('${action.screen}')" style="background-color: ${action.color};">
+                                <i data-lucide="${action.icon}" class="w-8 h-8 text-white mb-2"></i>
+                                <span class="text-sm font-semibold text-white">${action.title}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+            },
+            
+            // --- Helper for creating common form fields ---
+            renderInputField(id, label, type = 'text', value = '', required = true) {
+                return `
+                    <div class="flex flex-col space-y-1">
+                        <label for="${id}" class="text-sm font-medium text-gray-400">${label} ${required ? '<span class="text-red-500">*</span>' : ''}</label>
+                        <input type="${type}" id="${id}" name="${id}" value="${value}" ${required ? 'required' : ''}
+                               class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg focus:ring-accent focus:border-accent transition-colors"
+                               style="--accent: var(--accent-color);">
+                    </div>
+                `;
+            },
+
+            // --- Screen: Manage Classes ---
+            
+            renderClasses() {
+                return `
+                    <div class="card p-6 mb-8">
+                        <h2 class="text-xl font-bold mb-4">Add New Class</h2>
+                        <form id="class-form" onsubmit="App.handleClassSubmit(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                ${this.renderInputField('class-name', 'Class Name (e.g., F.Sc Part I, Matric 9th)', 'text', '', true)}
+                                <div class="flex items-end pt-2 md:pt-0">
+                                    <button type="submit" class="accent-button w-full py-2.5 flex justify-center items-center">
+                                        <i data-lucide="save" class="w-5 h-5 mr-2"></i> Save Class
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">Existing Classes (${this.data.classes.length})</h2>
+                        ${this.renderClassesTable()}
+                    </div>
+                `;
+            },
+            
+            renderClassesTable() {
+                if (this.data.classes.length === 0) {
+                    return `<p class="text-gray-400">No classes have been added yet.</p>`;
+                }
+
+                return `
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700 text-sm">
+                            <thead class="bg-gray-800">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Class Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Students</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                ${this.data.classes.map(cls => {
+                                    const studentCount = this.data.students.filter(s => s.class === cls.className).length;
+                                    return `
+                                        <tr class="hover:bg-gray-800 transition-colors">
+                                            <td class="px-6 py-4 whitespace-nowrap font-medium">${cls.className}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-gray-400">${studentCount}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <button class="text-red-400 hover:text-red-600 transition-colors" onclick="App.deleteClass('${cls.id}', '${cls.className}')">
+                                                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            },
+
+            handleClassSubmit(event) {
+                event.preventDefault();
+                const className = document.getElementById('class-name').value.trim();
+                
+                if (!className) {
+                    this.showModal('Input Required', 'Please enter a class name.');
+                    return;
+                }
+
+                if (this.data.classes.some(cls => cls.className.toLowerCase() === className.toLowerCase())) {
+                    this.showModal('Duplicate Class', `The class "${className}" already exists.`);
+                    return;
+                }
+
+                this.data.classes.push({ id: generateId(), className });
+                this.saveData('classes');
+                document.getElementById('class-form').reset();
+                this.render(); // Rerender the screen
+                this.showModal('Success', `Class "${className}" added successfully.`);
+            },
+
+            deleteClass(classId, className) {
+                this.showModal(
+                    'Confirm Deletion',
+                    `Are you sure you want to delete the class: "${className}"? This action is irreversible and will affect all related student/teacher records!`,
+                    true,
+                    () => {
+                        this.data.classes = this.data.classes.filter(cls => cls.id !== classId);
+                        
+                        // Update related records (optional cleanup)
+                        this.data.students.forEach(s => { if (s.class === className) s.class = 'Unassigned'; });
+                        this.data.teachers.forEach(t => { if (t.classAssigned === className) t.classAssigned = 'Unassigned'; });
+                        
+                        this.saveData('classes');
+                        this.saveData('students');
+                        this.saveData('teachers');
+
+                        this.render();
+                        this.showModal('Deleted', `Class "${className}" and related records updated.`);
+                    }
+                );
+            },
+
+            // --- Screen: Admissions ---
+
+            renderClassSelect(id, value = '') {
+                return `
+                    <div class="flex flex-col space-y-1">
+                        <label for="${id}" class="text-sm font-medium text-gray-400">Class <span class="text-red-500">*</span></label>
+                        <select id="${id}" name="${id}" required
+                                class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg focus:ring-accent focus:border-accent transition-colors"
+                                style="--accent: var(--accent-color);">
+                            <option value="" disabled ${!value ? 'selected' : ''}>Select Class</option>
+                            ${this.data.classes.map(cls => `
+                                <option value="${cls.className}" ${value === cls.className ? 'selected' : ''}>${cls.className}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                `;
+            },
+
+            renderAdmissions() {
+                return `
+                    <div class="card p-6 mb-8">
+                        <h2 class="text-xl font-bold mb-4">Student Admission Form</h2>
+                        <form id="admission-form" onsubmit="App.handleAdmissionSubmit(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                ${this.renderInputField('student-name', 'Student Name')}
+                                ${this.renderInputField('father-name', 'Father Name')}
+                                ${this.renderInputField('dob', 'Date of Birth', 'date')}
+                                ${this.renderClassSelect('student-class')}
+                                ${this.renderInputField('contact', 'Contact Number', 'tel')}
+                                ${this.renderInputField('emergency-contact', 'Emergency Contact', 'tel')}
+                                ${this.renderInputField('address', 'Address', 'text', '', true)}
+                                
+                                <!-- New Photo Upload Field -->
+                                <div class="flex flex-col space-y-1">
+                                    <label for="student-photo" class="text-sm font-medium text-gray-400">Student Photo (Upload Optional)</label>
+                                    <input type="file" id="student-photo" name="student-photo" accept="image/*"
+                                           class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 transition-colors"
+                                           style="--accent: var(--accent-color);">
+                                </div>
+                                <!-- End New Photo Upload Field -->
+                            </div>
+                            <div class="mt-6 flex justify-end">
+                                <button type="submit" class="accent-button px-6 py-2.5 flex items-center">
+                                    <i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> Enroll Student
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">Enrolled Students (${this.data.students.length})</h2>
+                        ${this.renderStudentsTable()}
+                    </div>
+                `;
+            },
+            
+            async handleAdmissionSubmit(event) {
+                event.preventDefault();
+                const form = event.target;
+                
+                const newStudent = {
+                    id: generateId(),
+                    name: form['student-name'].value,
+                    father: form['father-name'].value,
+                    dob: form.dob.value,
+                    class: form['student-class'].value,
+                    contact: form.contact.value,
+                    emergency: form['emergency-contact'].value,
+                    address: form.address.value,
+                    photoBase64: '', // Store Base64 data here
+                };
+
+                const photoFile = form['student-photo'].files[0];
+
+                if (photoFile) {
+                    try {
+                        // Wait for the file to be read and converted to Base64
+                        await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                newStudent.photoBase64 = e.target.result;
+                                resolve();
+                            };
+                            reader.onerror = reject;
+                            reader.readAsDataURL(photoFile);
+                        });
+                    } catch (error) {
+                        console.error('Error reading file:', error);
+                        this.showModal('Photo Error', 'Could not read the photo file. Proceeding without photo.');
+                    }
+                }
+                
+                this.data.students.push(newStudent);
+                this.saveData('students');
+                form.reset();
+                this.render();
+                this.showModal('Success', `${newStudent.name} admitted successfully to ${newStudent.class}.`);
+            },
+
+            renderStudentsTable() {
+                if (this.data.students.length === 0) {
+                    return `<p class="text-gray-400">No students have been admitted yet.</p>`;
+                }
+
+                return `
+                    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                        <table class="min-w-full divide-y divide-gray-700 text-sm">
+                            <thead class="bg-gray-800 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Photo</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Class</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">DOB</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Contact</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                ${this.data.students.map(s => `
+                                    <tr class="hover:bg-gray-800 transition-colors">
+                                        <td class="px-6 py-4">
+                                            ${s.photoBase64 ? 
+                                                `<img src="${s.photoBase64}" alt="${s.name}" class="w-10 h-10 object-cover rounded-full">` :
+                                                `<i data-lucide="user-circle" class="w-10 h-10 text-gray-500"></i>`
+                                            }
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap font-medium">${s.name}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">${s.class}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-gray-400">${s.dob}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">${s.contact}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <button class="text-red-400 hover:text-red-600 transition-colors" onclick="App.deleteStudent('${s.id}', '${s.name}')">
+                                                <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            },
+            
+            deleteStudent(studentId, studentName) {
+                this.showModal(
+                    'Confirm Deletion',
+                    `Are you sure you want to delete the student: "${studentName}"? This will not delete their historical attendance/fee records.`,
+                    true,
+                    () => {
+                        this.data.students = this.data.students.filter(s => s.id !== studentId);
+                        this.saveData('students');
+                        this.render();
+                        this.showModal('Deleted', `Student "${studentName}" has been removed from admissions list.`);
+                    }
+                );
+            },
+
+            // --- Screen: Teachers ---
+            
+            renderTeachers() {
+                return `
+                    <div class="card p-6 mb-8">
+                        <h2 class="text-xl font-bold mb-4">Add New Teacher</h2>
+                        <form id="teacher-form" onsubmit="App.handleTeacherSubmit(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                ${this.renderInputField('teacher-name', 'Teacher Name')}
+                                ${this.renderInputField('subject', 'Subject Taught')}
+                                ${this.renderInputField('teacher-contact', 'Contact Number', 'tel')}
+                                ${this.renderClassSelect('teacher-class', 'Unassigned')}
+                            </div>
+                            <div class="mt-6 flex justify-end">
+                                <button type="submit" class="accent-button px-6 py-2.5 flex items-center">
+                                    <i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> Enroll Teacher
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">Current Teachers (${this.data.teachers.length})</h2>
+                        ${this.renderTeachersTable()}
+                    </div>
+                `;
+            },
+
+            handleTeacherSubmit(event) {
+                event.preventDefault();
+                const form = event.target;
+                
+                const newTeacher = {
+                    id: generateId(),
+                    name: form['teacher-name'].value,
+                    subject: form.subject.value,
+                    contact: form['teacher-contact'].value,
+                    classAssigned: form['teacher-class'].value,
+                };
+                
+                this.data.teachers.push(newTeacher);
+                this.saveData('teachers');
+                form.reset();
+                this.render();
+                this.showModal('Success', `${newTeacher.name} (${newTeacher.subject}) added successfully.`);
+            },
+
+            renderTeachersTable() {
+                if (this.data.teachers.length === 0) {
+                    return `<p class="text-gray-400">No teachers have been added yet.</p>`;
+                }
+
+                return `
+                    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                        <table class="min-w-full divide-y divide-gray-700 text-sm">
+                            <thead class="bg-gray-800 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Subject</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Assigned Class</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Contact</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                ${this.data.teachers.map(t => `
+                                    <tr class="hover:bg-gray-800 transition-colors">
+                                        <td class="px-6 py-4 whitespace-nowrap font-medium">${t.name}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">${t.subject}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">${t.classAssigned}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-gray-400">${t.contact}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <button class="text-red-400 hover:text-red-600 transition-colors" onclick="App.deleteTeacher('${t.id}', '${t.name}')">
+                                                <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            },
+            
+            deleteTeacher(teacherId, teacherName) {
+                this.showModal(
+                    'Confirm Deletion',
+                    `Are you sure you want to delete the teacher: "${teacherName}"?`,
+                    true,
+                    () => {
+                        this.data.teachers = this.data.teachers.filter(t => t.id !== teacherId);
+                        this.saveData('teachers');
+                        this.render();
+                        this.showModal('Deleted', `Teacher "${teacherName}" has been removed.`);
+                    }
+                );
+            },
+
+            // --- Screen: Attendance ---
+
+            renderAttendance() {
+                const selectedClass = this.state.attendanceFilters.classId;
+                const selectedDate = this.state.attendanceFilters.date;
+                const studentsInClass = selectedClass ? this.data.students.filter(s => s.class === selectedClass) : [];
+                const existingAttendance = this.data.attendance.filter(a => a.class === selectedClass && a.date === selectedDate);
+                
+                const attendanceData = studentsInClass.map(s => {
+                    const statusRecord = existingAttendance.find(a => a.studentId === s.id);
+                    return {
+                        ...s,
+                        status: statusRecord ? statusRecord.status : 'P' // Default to Present
+                    };
+                });
+                
+                const classOptions = this.data.classes.map(cls => 
+                    `<option value="${cls.className}" ${selectedClass === cls.className ? 'selected' : ''}>${cls.className}</option>`
+                ).join('');
+
+                return `
+                    <div class="card p-6 mb-8">
+                        <h2 class="text-xl font-bold mb-4">Attendance Filters</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div class="flex flex-col space-y-1">
+                                <label for="attendance-class" class="text-sm font-medium text-gray-400">Select Class</label>
+                                <select id="attendance-class" onchange="App.handleAttendanceFilterChange('classId', this.value)"
+                                    class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg">
+                                    <option value="">-- Select Class --</option>
+                                    ${classOptions}
+                                </select>
+                            </div>
+                            <div class="flex flex-col space-y-1">
+                                <label for="attendance-date" class="text-sm font-medium text-gray-400">Select Date</label>
+                                <input type="date" id="attendance-date" value="${selectedDate}" onchange="App.handleAttendanceFilterChange('date', this.value)"
+                                    class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${selectedClass ? `
+                        <div class="card p-6">
+                            <h2 class="text-xl font-bold mb-4">Mark Attendance for ${selectedClass} on ${formatDate(selectedDate)}</h2>
+                            <form id="attendance-form" onsubmit="App.handleAttendanceSave(event, '${selectedClass}', '${selectedDate}')">
+                                <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                                    <table class="min-w-full divide-y divide-gray-700 text-sm">
+                                        <thead class="bg-gray-800 sticky top-0 z-10">
+                                            <tr>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider w-1/12">ID</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider w-8/12">Student Name</th>
+                                                <th class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider w-3/12">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-800" id="attendance-list">
+                                            ${attendanceData.length > 0 ? attendanceData.map(s => `
+                                                <tr class="hover:bg-gray-800 transition-colors" data-student-id="${s.id}">
+                                                    <td class="px-6 py-4 whitespace-nowrap text-gray-500">${s.id.substring(0, 4)}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap font-medium">${s.name}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                                                        <div class="inline-flex rounded-lg bg-gray-600 p-0.5">
+                                                            <button type="button" data-status="P" class="px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${s.status === 'P' ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-700'}" onclick="App.toggleAttendanceStatus(this, '${s.id}', 'P')">Present</button>
+                                                            <button type="button" data-status="A" class="px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${s.status === 'A' ? 'bg-red-600 text-white' : 'text-gray-300 hover:bg-gray-700'}" onclick="App.toggleAttendanceStatus(this, '${s.id}', 'A')">Absent</button>
+                                                        </div>
+                                                        <input type="hidden" name="status-${s.id}" value="${s.status}">
+                                                    </td>
+                                                </tr>
+                                            `).join('') : `
+                                                <tr><td colspan="3" class="px-6 py-4 text-center text-gray-400">No students found in ${selectedClass}.</td></tr>
+                                            `}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                ${attendanceData.length > 0 ? `
+                                    <div class="mt-6 flex justify-end">
+                                        <button type="submit" class="accent-button px-6 py-2.5 flex items-center">
+                                            <i data-lucide="save" class="w-5 h-5 mr-2"></i> Save Attendance
+                                        </button>
+                                    </div>
+                                ` : ''}
+                            </form>
+                        </div>
+                    ` : `<div class="card p-6 text-gray-400">Please select a class and date to mark attendance.</div>`}
+                `;
+            },
+            
+            handleAttendanceFilterChange(key, value) {
+                this.state.attendanceFilters[key] = value;
+                this.render();
+            },
+
+            toggleAttendanceStatus(button, studentId, status) {
+                const row = button.closest('tr');
+                const pButton = row.querySelector('[data-status="P"]');
+                const aButton = row.querySelector('[data-status="A"]');
+                const hiddenInput = row.querySelector(`input[name="status-${studentId}"]`);
+
+                if (status === 'P') {
+                    pButton.classList.add('bg-green-600', 'text-white');
+                    pButton.classList.remove('text-gray-300', 'hover:bg-gray-700');
+                    aButton.classList.remove('bg-red-600', 'text-white');
+                    aButton.classList.add('text-gray-300', 'hover:bg-gray-700');
+                    hiddenInput.value = 'P';
+                } else {
+                    aButton.classList.add('bg-red-600', 'text-white');
+                    aButton.classList.remove('text-gray-300', 'hover:bg-gray-700');
+                    pButton.classList.remove('bg-green-600', 'text-white');
+                    pButton.classList.add('text-gray-300', 'hover:bg-gray-700');
+                    hiddenInput.value = 'A';
+                }
+            },
+
+            handleAttendanceSave(event, selectedClass, selectedDate) {
+                event.preventDefault();
+                const form = event.target;
+                const studentRows = form.querySelectorAll('[data-student-id]');
+                
+                const newAttendanceRecords = [];
+                studentRows.forEach(row => {
+                    const studentId = row.dataset.studentId;
+                    const status = row.querySelector(`input[name="status-${studentId}"]`).value;
+                    
+                    newAttendanceRecords.push({
+                        id: generateId(),
+                        studentId: studentId,
+                        class: selectedClass,
+                        date: selectedDate,
+                        status: status,
+                    });
+                });
+                
+                // Remove existing attendance records for this class/date
+                this.data.attendance = this.data.attendance.filter(a => !(a.class === selectedClass && a.date === selectedDate));
+                
+                // Add new records
+                this.data.attendance.push(...newAttendanceRecords);
+                this.saveData('attendance');
+                this.showModal('Success', `Attendance for ${selectedClass} on ${formatDate(selectedDate)} saved successfully!`);
+            },
+            
+            // --- Screen: Fees ---
+
+            renderFees() {
+                const studentsWithClass = this.data.students.map(s => {
+                    const classInfo = this.data.classes.find(c => c.className === s.class);
+                    return { ...s, classId: classInfo ? classInfo.id : null };
+                }).sort((a, b) => a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
+                
+                const classOptions = this.data.classes.map(cls => 
+                    `<option value="${cls.className}" ${this.state.feesFilters.classId === cls.className ? 'selected' : ''}>${cls.className}</option>`
+                ).join('');
+
+                const filteredFees = this.data.fees.filter(fee => {
+                    const student = this.data.students.find(s => s.id === fee.studentId);
+                    const classMatch = !this.state.feesFilters.classId || (student && student.class === this.state.feesFilters.classId);
+                    const monthMatch = !this.state.feesFilters.month || fee.monthYear === this.state.feesFilters.month;
+                    return classMatch && monthMatch;
+                });
+                
+                // Normalize and get unique month options from fees data
+                const uniqueMonths = [...new Set(this.data.fees.map(f => f.monthYear))].map(monthYear => {
+                    // Ensure full YYYY-MM format for sorting
+                    const [year, month] = monthYear.split('-');
+                    return `${year}-${month.padStart(2, '0')}`;
+                });
+                
+                const monthOptions = [...new Set(uniqueMonths)].sort((a, b) => b.localeCompare(a)).map(monthYear => 
+                    `<option value="${monthYear}" ${this.state.feesFilters.month === monthYear ? 'selected' : ''}>${monthYear}</option>`
+                ).join('');
+
+
+                return `
+                    <div class="card p-6 mb-8">
+                        <h2 class="text-xl font-bold mb-4">Collect Fee</h2>
+                        <form id="fees-form" onsubmit="App.handleFeeCollection(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- Student Selector -->
+                                <div class="flex flex-col space-y-1">
+                                    <label for="fee-student-id" class="text-sm font-medium text-gray-400">Select Student <span class="text-red-500">*</span></label>
+                                    <select id="fee-student-id" required
+                                            class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg">
+                                        <option value="" disabled selected>Select Student</option>
+                                        ${studentsWithClass.map(s => `
+                                            <option value="${s.id}">${s.name} (${s.class})</option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                                <!-- Month Selector -->
+                                <div class="flex flex-col space-y-1">
+                                    <label for="fee-month" class="text-sm font-medium text-gray-400">Month <span class="text-red-500">*</span></label>
+                                    <input type="month" id="fee-month" required value="${new Date().toISOString().substring(0, 7)}"
+                                        class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg">
+                                </div>
+                                <!-- Amount Input -->
+                                ${this.renderInputField('fee-amount', 'Amount Collected (PKR)', 'number')}
+                            </div>
+                            <div class="mt-6 flex justify-end">
+                                <button type="submit" class="accent-button px-6 py-2.5 flex items-center">
+                                    <i data-lucide="chevrons-down-up" class="w-5 h-5 mr-2"></i> Collect Fee
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">Fee Records (${filteredFees.length})</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div class="flex flex-col space-y-1">
+                                <label for="fee-filter-class" class="text-sm font-medium text-gray-400">Filter by Class</label>
+                                <select id="fee-filter-class" onchange="App.handleFeeFilterChange('classId', this.value)"
+                                    class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg">
+                                    <option value="">All Classes</option>
+                                    ${classOptions}
+                                </select>
+                            </div>
+                            <div class="flex flex-col space-y-1">
+                                <label for="fee-filter-month" class="text-sm font-medium text-gray-400">Filter by Month</label>
+                                <select id="fee-filter-month" onchange="App.handleFeeFilterChange('month', this.value)"
+                                    class="bg-gray-700 border border-gray-600 text-white p-2.5 rounded-lg">
+                                    <option value="">All Months</option>
+                                    ${monthOptions}
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button class="accent-button w-full py-2.5 flex justify-center items-center" onclick="App.exportToCSV('fees')">
+                                    <i data-lucide="file-text" class="w-5 h-5 mr-2"></i> Export Report
+                                </button>
+                            </div>
+                        </div>
+                        ${this.renderFeesTable(filteredFees)}
+                    </div>
+                `;
+            },
+            
+            handleFeeCollection(event) {
+                event.preventDefault();
+                const form = event.target;
+                const studentId = form['fee-student-id'].value;
+                const monthInput = form['fee-month'].value; // YYYY-MM
+                const amount = parseFloat(form['fee-amount'].value);
+
+                if (!studentId || !monthInput || isNaN(amount) || amount <= 0) {
+                    this.showModal('Error', 'Please fill all fields with valid data.');
+                    return;
+                }
+                
+                const monthYear = monthInput; // Use YYYY-MM format consistently for storage and filtering
+                
+                // Check for duplicate payment for the same month/student
+                const isDuplicate = this.data.fees.some(f => f.studentId === studentId && f.monthYear === monthYear);
+
+                if (isDuplicate) {
+                    this.showModal('Duplicate Payment', `Fee for this student for ${monthYear} has already been recorded.`);
+                    return;
+                }
+
+                const newFee = {
+                    id: generateId(),
+                    studentId: studentId,
+                    monthYear: monthYear,
+                    amount: amount,
+                    dateCollected: new Date().toISOString().substring(0, 10),
+                };
+
+                this.data.fees.push(newFee);
+                this.saveData('fees');
+                form.reset();
+                this.render();
+                this.showModal('Fee Collected', `${formatCurrency(amount)} collected for ${monthYear}.`);
+            },
+            
+            handleFeeFilterChange(key, value) {
+                this.state.feesFilters[key] = value;
+                this.render();
+            },
+            
+            renderFeesTable(fees) {
+                if (fees.length === 0) {
+                    return `<p class="text-gray-400">No fee records found for the current filters.</p>`;
+                }
+
+                return `
+                    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                        <table class="min-w-full divide-y divide-gray-700 text-sm">
+                            <thead class="bg-gray-800 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Student</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Class</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Month</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">Amount</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Date Collected</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                ${fees.map(f => {
+                                    const student = this.data.students.find(s => s.id === f.studentId) || { name: 'Unknown', class: 'N/A' };
+                                    return `
+                                        <tr class="hover:bg-gray-800 transition-colors">
+                                            <td class="px-6 py-4 whitespace-nowrap font-medium">${student.name}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">${student.class}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">${f.monthYear}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right text-green-400">${formatCurrency(f.amount)}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-gray-400">${formatDate(f.dateCollected)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            },
+            
+            // --- Screen: Reports (Chart.js) ---
+
+            renderReports() {
+                // Determine the last 6 months for chart labels
+                const monthLabels = [];
+                const monthKeys = [];
+                for (let i = 5; i >= 0; i--) {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() - i);
+                    const monthYear = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                    monthKeys.push(monthYear);
+                    monthLabels.push(new Date(monthYear).toLocaleString('en-US', { month: 'short', year: 'numeric' }));
+                }
+                
+                return `
+                    <h2 class="text-2xl font-bold mb-4 border-b border-gray-700 pb-2" style="color: var(--accent-color);">Financial & Enrollment Overview</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div class="card p-6">
+                            <h3 class="text-xl font-bold mb-4">Monthly Fee Collection (Last 6 Months)</h3>
+                            <canvas id="feesChart" class="w-full h-80"></canvas>
+                        </div>
+                        <div class="card p-6">
+                            <h3 class="text-xl font-bold mb-4">Class Enrollment Breakdown</h3>
+                            <canvas id="enrollmentChart" class="w-full h-80"></canvas>
+                        </div>
+                    </div>
+                    
+                    <h2 class="text-2xl font-bold mb-4 border-b border-gray-700 pb-2" style="color: var(--accent-color);">Data Export</h2>
+                    <div class="card p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <button class="accent-button w-full py-3 flex justify-center items-center text-lg" onclick="App.exportToCSV('students')">
+                            <i data-lucide="file-text" class="w-6 h-6 mr-2"></i> Export Students & Admissions
+                        </button>
+                        <button class="accent-button w-full py-3 flex justify-center items-center text-lg" onclick="App.exportToCSV('fees')">
+                            <i data-lucide="file-text" class="w-6 h-6 mr-2"></i> Export Fee Records
+                        </button>
+                    </div>
+                `;
+            },
+            
+            runPostRenderScripts(screen) {
+                if (screen === 'reports') {
+                    this.initCharts();
+                }
+            },
+
+            initCharts() {
+                // Chart 1: Monthly Fee Collection
+                const feeDataMap = {};
+                const monthLabels = [];
+                for (let i = 5; i >= 0; i--) {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() - i);
+                    const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                    feeDataMap[monthKey] = 0;
+                    monthLabels.push(new Date(monthKey + '-01').toLocaleString('en-US', { month: 'short', year: 'numeric' }));
+                }
+                
+                this.data.fees.forEach(f => {
+                    const monthKey = f.monthYear;
+                    if (feeDataMap.hasOwnProperty(monthKey)) {
+                        feeDataMap[monthKey] += f.amount;
+                    }
+                });
+                
+                const data = Object.values(feeDataMap);
+
+                // Destroy existing chart instance if present
+                if (window.feesChartInstance) {
+                    window.feesChartInstance.destroy();
+                }
+
+                window.feesChartInstance = new Chart(document.getElementById('feesChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: monthLabels,
+                        datasets: [{
+                            label: 'Total Fees Collected (PKR)',
+                            data: data,
+                            backgroundColor: 'rgba(0, 191, 255, 0.7)', // Accent Color
+                            borderColor: 'rgb(0, 191, 255)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: 'white' } },
+                            x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: 'white' } }
+                        },
+                        plugins: { legend: { labels: { color: 'white' } } }
+                    }
+                });
+                
+                // Chart 2: Class Enrollment Breakdown
+                const enrollmentMap = {};
+                this.data.classes.forEach(c => enrollmentMap[c.className] = 0);
+                this.data.students.forEach(s => {
+                    if (enrollmentMap.hasOwnProperty(s.class)) {
+                        enrollmentMap[s.class]++;
+                    }
+                });
+                
+                const classLabels = Object.keys(enrollmentMap);
+                const classData = Object.values(enrollmentMap);
+                
+                if (window.enrollmentChartInstance) {
+                    window.enrollmentChartInstance.destroy();
+                }
+
+                window.enrollmentChartInstance = new Chart(document.getElementById('enrollmentChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: classLabels,
+                        datasets: [{
+                            label: 'Student Count',
+                            data: classData,
+                            backgroundColor: [
+                                '#00BFFF', '#FFD700', '#FF6384', '#36A2EB', '#FF9F40', '#4BC0C0', '#9966FF'
+                            ],
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: 'white' } } }
+                    }
+                });
+            },
+            
+            exportToCSV(dataType) {
+                let dataToExport = [];
+                let headers = [];
+                let filename = '';
+
+                switch(dataType) {
+                    case 'students':
+                        dataToExport = this.data.students;
+                        headers = ['ID', 'Name', 'Father Name', 'DOB', 'Class', 'Contact', 'Emergency Contact', 'Address', 'Photo_Base64_Present'];
+                        filename = 'PMI_Students_Data.csv';
+                        break;
+                    case 'fees':
+                        dataToExport = this.data.fees.map(f => {
+                            const student = this.data.students.find(s => s.id === f.studentId) || { name: 'Unknown', class: 'N/A' };
+                            return {
+                                ...f,
+                                studentName: student.name,
+                                studentClass: student.class,
+                            };
+                        });
+                        headers = ['ID', 'Student Name', 'Class', 'Month', 'Amount', 'Date Collected'];
+                        filename = 'PMI_Fees_Data.csv';
+                        break;
+                    default:
+                        return;
+                }
+
+                if (dataToExport.length === 0) {
+                    this.showModal('Export Failed', `No ${dataType} data available to export.`);
+                    return;
+                }
+
+                // Simple CSV generation
+                const csvRows = [];
+                csvRows.push(headers.join(','));
+
+                dataToExport.forEach(item => {
+                    const values = headers.map(header => {
+                        let value;
+                        // Map header to property
+                        switch(header) {
+                            case 'ID': value = item.id; break;
+                            case 'Name': value = item.name; break;
+                            case 'Father Name': value = item.father; break;
+                            case 'DOB': value = item.dob; break;
+                            case 'Class': value = item.class || item.studentClass; break;
+                            case 'Contact': value = item.contact; break;
+                            case 'Emergency Contact': value = item.emergency; break;
+                            case 'Address': value = item.address; break;
+                            case 'Photo_Base64_Present': value = item.photoBase64 ? 'Yes' : 'No'; break;
+                            case 'Student Name': value = item.studentName; break;
+                            case 'Month': value = item.monthYear; break;
+                            case 'Amount': value = item.amount; break;
+                            case 'Date Collected': value = item.dateCollected; break;
+                            default: value = '';
+                        }
+                        // Simple check to escape commas and quotes (basic implementation)
+                        const stringValue = String(value).replace(/"/g, '""');
+                        return `"${stringValue}"`;
+                    });
+                    csvRows.push(values.join(','));
+                });
+
+                const csvString = csvRows.join('\n');
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+
+                // Create a temporary link element to trigger the download
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                this.showModal('Export Successful', `Data exported to ${filename} successfully!`);
+            },
+
+            // --- Screen: Settings ---
+
+            renderSettings() {
+                return `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="card p-6">
+                            <h2 class="text-xl font-bold mb-4 border-b border-gray-700 pb-2">Theme & Display</h2>
+                            <div class="flex justify-between items-center py-3">
+                                <span class="text-lg">Dark Mode</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" value="" class="sr-only peer" ${this.state.isDarkTheme ? 'checked' : ''} onchange="App.toggleTheme()">
+                                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="card p-6">
+                            <h2 class="text-xl font-bold mb-4 border-b border-gray-700 pb-2">Data Management</h2>
+                            
+                            <!-- Backup -->
+                            <div class="flex flex-col space-y-4 mb-6">
+                                <button class="accent-button py-2.5 flex justify-center items-center" onclick="App.backupData()">
+                                    <i data-lucide="download" class="w-5 h-5 mr-2"></i> Backup All Data (JSON)
+                                </button>
+                                <p class="text-sm text-gray-400">Downloads all app data into a single JSON file.</p>
+                            </div>
+
+                            <!-- Restore -->
+                            <div class="flex flex-col space-y-4 mb-6 pt-4 border-t border-gray-700">
+                                <input type="file" id="restore-file" accept=".json" class="hidden" onchange="App.restoreData(event)">
+                                <button class="bg-yellow-600 text-white py-2.5 flex justify-center items-center rounded-lg hover:opacity-90 transition-opacity" onclick="document.getElementById('restore-file').click()">
+                                    <i data-lucide="upload" class="w-5 h-5 mr-2"></i> Restore Data (JSON)
+                                </button>
+                                <p class="text-sm text-gray-400">Upload a backup JSON file to overwrite current data.</p>
+                            </div>
+
+                            <!-- Clear All Data -->
+                            <div class="flex flex-col space-y-4 pt-4 border-t border-gray-700">
+                                <button class="bg-red-600 text-white py-2.5 flex justify-center items-center rounded-lg hover:opacity-90 transition-opacity" onclick="App.confirmClearData()">
+                                    <i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i> Clear All App Data
+                                </button>
+                                <p class="text-sm text-red-400 font-semibold">WARNING: This permanently deletes ALL data in your browser.</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+            
+            backupData() {
+                const backup = {};
+                Object.keys(LS_KEYS).forEach(key => {
+                    backup[LS_KEYS[key]] = localStorage.getItem(LS_KEYS[key]);
+                });
+
+                const dataStr = JSON.stringify(backup, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `PMI_Backup_${new Date().toISOString().substring(0, 10)}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                this.showModal('Backup Complete', 'All data has been backed up to a JSON file.');
+            },
+
+            restoreData(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const restoredData = JSON.parse(e.target.result);
+                        this.showModal(
+                            'Confirm Restore',
+                            'Are you sure you want to restore? This will overwrite your current data!',
+                            true,
+                            () => {
+                                let restoredCount = 0;
+                                Object.keys(restoredData).forEach(lsKey => {
+                                    if (localStorage.getItem(lsKey) !== restoredData[lsKey]) {
+                                        localStorage.setItem(lsKey, restoredData[lsKey]);
+                                        restoredCount++;
+                                    }
+                                });
+                                this.loadData();
+                                this.render();
+                                this.showModal('Restore Successful', `${restoredCount} data stores were successfully restored.`);
+                            }
+                        );
+                    } catch (error) {
+                        console.error('Error parsing restoration file:', error);
+                        this.showModal('Restore Failed', 'The file is corrupted or not a valid PMI backup JSON.');
+                    }
+                };
+                reader.readAsText(file);
+            },
+
+            confirmClearData() {
+                this.showModal(
+                    'DANGER: Clear All Data',
+                    'This action is irreversible and will permanently remove all Classes, Students, Teachers, Fees, and Attendance data from your browser. Continue?',
+                    true,
+                    () => {
+                        Object.keys(LS_KEYS).forEach(key => localStorage.removeItem(LS_KEYS[key]));
+                        this.loadData(); // Re-initialize empty state
+                        this.render();
+                        this.showModal('Data Cleared', 'All application data has been successfully cleared.');
+                    }
+                );
+            },
+
+            // --- Initialization ---
+
+            init() {
+                // Load data and set theme first
+                this.loadData();
+                this.setTheme(this.state.isDarkTheme);
+                
+                // Set up date/time ticker
+                updateDateTime();
+                setInterval(updateDateTime, 1000);
+                
+                // Render the initial screen
+                this.render();
+            }
+        };
+
+        // Initialize the app immediately
+        App.init();
+
+    </script>
+</body>
+</html>
